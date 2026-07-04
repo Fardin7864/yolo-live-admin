@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { CheckCircle2, Edit2, Image as ImageIcon, Loader2, Plus, Trash2, ToggleLeft, ToggleRight, Upload, Video, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAdminRole } from '@/lib/useAdminRole';
+import { optimizeImageFile } from '@/lib/imageOptimizer';
 
 type IntroRow = {
   id: string;
@@ -22,7 +23,7 @@ type IntroRow = {
 };
 
 const BUCKET = 'mall-intros';
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 180 * 1024;
 const MAX_VIDEO_BYTES = 5 * 1024 * 1024;
 const MIN_INTRO_DURATION_SECONDS = 7.5;
 const MAX_INTRO_DURATION_SECONDS = 8.5;
@@ -216,8 +217,18 @@ function IntroModal({ row, creating, onClose }: { row: IntroRow; creating: boole
       alert(isThumb ? 'Thumbnail must be JPG, PNG, or WebP.' : 'Intro video must be an optimized MP4 file.');
       return;
     }
-    if (file.size > (isThumb ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES)) {
-      alert(isThumb ? 'Thumbnail must be 5 MB or smaller.' : 'Intro video must be 5 MB or smaller.');
+    let uploadFile = file;
+    if (isThumb) {
+      uploadFile = await optimizeImageFile(file, {
+        maxWidth: 480,
+        maxHeight: 640,
+        quality: 0.76,
+        outputType: 'image/webp',
+        filenamePrefix: value.id || value.name || file.name,
+      });
+    }
+    if (uploadFile.size > (isThumb ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES)) {
+      alert(isThumb ? 'Thumbnail is still larger than 180 KB after optimization. Please use a simpler image.' : 'Intro video must be 5 MB or smaller.');
       return;
     }
     let videoMetadata: { duration: number; width: number; height: number } | null = null;
@@ -239,9 +250,9 @@ function IntroModal({ row, creating, onClose }: { row: IntroRow; creating: boole
     }
     const setUploading = isThumb ? setUploadingThumb : setUploadingVideo;
     setUploading(true);
-    const path = buildPath(file, kind);
-    const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
-      contentType: isThumb ? (file.type || 'image/webp') : 'video/mp4',
+    const path = buildPath(uploadFile, kind);
+    const { error } = await supabase.storage.from(BUCKET).upload(path, uploadFile, {
+      contentType: isThumb ? uploadFile.type : 'video/mp4',
       cacheControl: '31536000',
       upsert: false,
     });
@@ -252,7 +263,7 @@ function IntroModal({ row, creating, onClose }: { row: IntroRow; creating: boole
       ...current,
       video_url: url,
       duration_ms: Math.round((videoMetadata?.duration || 8) * 1000),
-      file_size_bytes: file.size,
+      file_size_bytes: uploadFile.size,
       video_width: videoMetadata?.width || null,
       video_height: videoMetadata?.height || null,
       video_mime_type: 'video/mp4',
