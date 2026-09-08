@@ -30,6 +30,12 @@ type Settings = {
   min_supported_app_version: string;
   store_url_android: string;
   app_update_notes: string;
+  self_gifting: {
+    enabled: boolean;
+    daily_diamond_limit: number;
+    daily_count_limit: number;
+    count_toward_earnings: boolean;
+  };
 };
 
 const DEFAULTS: Settings = {
@@ -47,11 +53,17 @@ const DEFAULTS: Settings = {
   bulk_diamond_bdt_per_1000: 10,
   sell_diamond_bdt_per_1000: 11,
   host_payout_bdt_per_1000:  9,
-  host_hour_reward: { enabled: true, beans: 6000, minutes: 60 },
+  host_hour_reward: { enabled: true, beans: 5000, minutes: 60 },
   latest_app_version: '1.1.19',
   min_supported_app_version: '1.1.19',
   store_url_android: '',
   app_update_notes: '',
+  self_gifting: {
+    enabled: true,
+    daily_diamond_limit: 0,
+    daily_count_limit: 0,
+    count_toward_earnings: false,
+  },
 };
 
 export default function SettingsPage() {
@@ -114,6 +126,14 @@ export default function SettingsPage() {
 
   const setField = <K extends keyof Settings>(key: K, value: Settings[K]) =>
     setSettings((s) => ({ ...s, [key]: value }));
+
+  // self_gifting is stored as one JSON object under a single system_settings key,
+  // so its fields are edited through a nested setter rather than setField.
+  const setSelfGift = <K extends keyof Settings['self_gifting']>(key: K, value: Settings['self_gifting'][K]) =>
+    setSettings((s) => ({
+      ...s,
+      self_gifting: { ...(s.self_gifting || DEFAULTS.self_gifting), [key]: value },
+    }));
 
   if (loading) {
     return (
@@ -218,6 +238,46 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* Self-gifting */}
+      <div className="glass-card p-6">
+        <h2 className="text-lg font-black text-white mb-1">Host Self-Gifting</h2>
+        <p className="text-xs text-gray-500 mb-5">
+          Lets a host send gifts to themselves during their own live, paid from their own
+          diamonds. Self-gifts never count toward rankings, agency income or withdrawable
+          earnings unless you switch that on below.
+        </p>
+        <div className="space-y-3">
+          <Toggle
+            label="Enable self-gifting"
+            desc="Global switch. Turning this off blocks it for every host immediately."
+            value={settings.self_gifting?.enabled ?? false}
+            onChange={(v) => setSelfGift('enabled', v)}
+          />
+          <Toggle
+            label="Count self-gifts toward earnings"
+            desc="Off by default. When on, self-gifted beans become withdrawable and count as agency income."
+            value={settings.self_gifting?.count_toward_earnings ?? false}
+            onChange={(v) => setSelfGift('count_toward_earnings', v)}
+          />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-5">
+          <Field
+            label="Daily diamond limit"
+            type="number"
+            hint="Max diamonds one host may self-gift per day (Asia/Dhaka). 0 = unlimited."
+            value={String(settings.self_gifting?.daily_diamond_limit ?? 0)}
+            onChange={(v) => setSelfGift('daily_diamond_limit', Math.max(0, Number(v) || 0))}
+          />
+          <Field
+            label="Daily gift count limit"
+            type="number"
+            hint="Max number of self-gifts per host per day. 0 = unlimited."
+            value={String(settings.self_gifting?.daily_count_limit ?? 0)}
+            onChange={(v) => setSelfGift('daily_count_limit', Math.max(0, Number(v) || 0))}
+          />
+        </div>
+      </div>
+
       {/* Feature toggles */}
       <div className="glass-card p-6">
         <div className="flex items-center gap-3 mb-6">
@@ -309,11 +369,11 @@ export default function SettingsPage() {
       </div>
 
       <div className="glass-card p-6">
-        <div className="flex items-center gap-3 mb-6"><DollarSign className="text-amber-400" size={24}/><div><h3 className="text-xl font-bold text-white">Daily Host Live Reward</h3><p className="text-xs text-gray-500">Cumulative video time, reset at midnight Asia/Dhaka. Audio does not count.</p></div></div>
+        <div className="flex items-center gap-3 mb-6"><DollarSign className="text-amber-400" size={24}/><div><h3 className="text-xl font-bold text-white">Daily Host Live Reward</h3><p className="text-xs text-gray-500">One continuous video hour, once per Asia/Dhaka calendar day. Audio does not count.</p></div></div>
         <Toggle label="Reward enabled" desc="Credit each eligible host at most once per Bangladesh calendar day." value={settings.host_hour_reward?.enabled !== false} onChange={(v)=>setField('host_hour_reward',{...(settings.host_hour_reward||DEFAULTS.host_hour_reward),enabled:v})}/>
         <div className="grid md:grid-cols-2 gap-5 mt-5">
-          <Field label="Reward beans" type="number" value={String(settings.host_hour_reward?.beans ?? 6000)} onChange={(v)=>setField('host_hour_reward',{...(settings.host_hour_reward||DEFAULTS.host_hour_reward),beans:Math.max(0,parseInt(v)||0)})}/>
-          <Field label="Required video minutes" type="number" value={String(settings.host_hour_reward?.minutes ?? 60)} onChange={(v)=>setField('host_hour_reward',{...(settings.host_hour_reward||DEFAULTS.host_hour_reward),minutes:Math.max(1,parseInt(v)||60)})}/>
+          <div className="rounded-lg border border-white/10 bg-white/[0.03] p-4"><p className="text-xs text-gray-500">Reward beans</p><p className="mt-1 text-lg font-black text-white">5,000</p></div>
+          <div className="rounded-lg border border-white/10 bg-white/[0.03] p-4"><p className="text-xs text-gray-500">Continuous video time</p><p className="mt-1 text-lg font-black text-white">60 minutes</p></div>
         </div>
       </div>
 
